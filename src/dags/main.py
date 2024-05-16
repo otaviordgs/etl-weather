@@ -10,10 +10,29 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 
 # Preciso usar para nao dar erro no import do config.py
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))           
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))        
 
-def transform_weather_info(weather_list):
-    pass
+def read_states_info() -> dict:
+        logging.info("Reading states file.")
+        logging.info(os.listdir("."))
+        with open("src/states_info.json", "r") as file:
+            states_info_dict = json.load(file)
+        return states_info_dict
+
+def convert_kelvin_to_celsius(temp_kelvin: float) -> float:
+        temp_celsius = temp_kelvin - 273.15
+        return round(temp_celsius, 2)
+
+def create_useful_info(weather_info: dict) -> dict:
+    return {
+        "city": weather_info["city"],
+        "temperature": convert_kelvin_to_celsius(weather_info["main"]["temp"]),
+        "temperature_min": convert_kelvin_to_celsius(weather_info["main"]["temp_min"]),
+        "temperature_max": convert_kelvin_to_celsius(weather_info["main"]["temp_max"]),
+        "feels_like": convert_kelvin_to_celsius(weather_info["main"]["feels_like"]),
+        "description": weather_info["weather"][0]["description"],
+        "date": datetime.today().strftime('%Y-%m-%d')
+    }
 
 with DAG(
     "etl_weather",
@@ -31,14 +50,7 @@ with DAG(
     catchup=False
 ) as dag:
     
-    def read_states_info() -> dict:
-        logging.info("Reading states file.")
-        logging.info(os.listdir("."))
-        with open("src/states_info.json", "r") as file:
-            states_info_dict = json.load(file)
-        return states_info_dict
-
-    @task
+    @task()
     def get_weather_info() -> list:
         states_info = read_states_info()
         weather_info_list = []
@@ -47,9 +59,20 @@ with DAG(
             longitute = value["longitude"]
             url = f"https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitute}&appid={OPEN_WEATHER_API_KEY}"
             response = requests.get(url)
-            weather_info_list.append(response.json())
+            response = response.json()
+            response['city'] = key
+            weather_info_list.append(response)
         logging.info("Extract task ran successfully!")
         return weather_info_list
     
-    get_weather_info()
+    @task
+    def transform_weather_info(ti = None):
+        weathers_info_list = ti.xcom_pull(key='return_value', task_ids='get_weather_info')
+        transformed_weather_list = []
+        for weather_info in weathers_info_list:
+            transformed_weather_list.append(create_useful_info(weather_info))
+
+        ti.xcom_push(key='transformed_weather_list', value=transformed_weather_list)
+    get_weather_info() >> transform_weather_info()
     
+# TO DO: ver como passar informações entre as tasks
