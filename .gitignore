@@ -2,6 +2,7 @@
 airflow.cfg
 airflow.db
 webserver_config.py
+airflow-webserver.pid
 
 **/__pycache__/**
 /logs/**

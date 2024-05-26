@@ -1,16 +1,19 @@
 import json
 import sys
 import os
+import boto3.resources
 import requests
 import logging
-from config import OPEN_WEATHER_API_KEY # colocar esse arquivo fora da pasta
+import boto3
+import pandas as pd
+from config import OPEN_WEATHER_API_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 from airflow.models.dag import DAG
 from airflow.decorators import task
-from airflow.operators.python import PythonOperator
+from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 
 # Preciso usar para nao dar erro no import do config.py
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))        
+# sys.path.append(os.path.join(os.path.dirname(__file__), '..'))        
 
 def read_states_info() -> dict:
         logging.info("Reading states file.")
@@ -73,6 +76,29 @@ with DAG(
             transformed_weather_list.append(create_useful_info(weather_info))
 
         ti.xcom_push(key='transformed_weather_list', value=transformed_weather_list)
-    get_weather_info() >> transform_weather_info()
+
+    @task
+    def send_data_to_s3(ti = None):
+        s3 = boto3.resource(
+            service_name='s3',
+            region_name='sa-east-1',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        )
+        bucket = s3.Bucket('otavio-projects')
+
+        transformed_weather_list = ti.xcom_pull(key='transformed_weather_list', task_ids='transform_weather_info')
+        df = pd.DataFrame(transformed_weather_list)
+        df.to_csv("weather_info.csv")
+        try:
+            bucket.upload_file("weather_info.csv", "weather_info.csv")
+        except ClientError as e:
+            logging.error(e)
+        finally:
+            os.remove("weather_info.csv")
+            logging.info(os.getcwd())
+        logging.info("File uploaded successfully!")     
+
+    get_weather_info() >> transform_weather_info() >> send_data_to_s3()
     
 # TO DO: ver como passar informações entre as tasks
