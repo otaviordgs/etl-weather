@@ -1,24 +1,21 @@
 import json
-import sys
 import os
 import boto3.resources
 import requests
 import logging
 import boto3
 import pandas as pd
-from config import OPEN_WEATHER_API_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+from dotenv import load_dotenv 
 from airflow.models.dag import DAG
 from airflow.decorators import task
 from botocore.exceptions import ClientError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta     
 
-# Preciso usar para nao dar erro no import do config.py
-# sys.path.append(os.path.join(os.path.dirname(__file__), '..'))        
+load_dotenv() 
 
 def read_states_info() -> dict:
         logging.info("Reading states file.")
-        logging.info(os.listdir("."))
-        with open("src/states_info.json", "r") as file:
+        with open("data/states_info.json", "r") as file:
             states_info_dict = json.load(file)
         return states_info_dict
 
@@ -55,6 +52,7 @@ with DAG(
     
     @task()
     def get_weather_info() -> list:
+        OPEN_WEATHER_API_KEY = os.getenv("OPEN_WEATHER_API_KEY")
         states_info = read_states_info()
         weather_info_list = []
         for key, value in states_info.items():
@@ -79,6 +77,8 @@ with DAG(
 
     @task
     def send_data_to_s3(ti = None):
+        AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+        AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         s3 = boto3.resource(
             service_name='s3',
             region_name='sa-east-1',
@@ -100,5 +100,3 @@ with DAG(
         logging.info("File uploaded successfully!")     
 
     get_weather_info() >> transform_weather_info() >> send_data_to_s3()
-    
-# TO DO: ver como passar informações entre as tasks
