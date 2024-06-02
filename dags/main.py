@@ -15,6 +15,7 @@ load_dotenv()
 
 def read_states_info() -> dict:
         logging.info("Reading states file.")
+        logging.info(os.system("cat .env"))
         with open("data/states_info.json", "r") as file:
             states_info_dict = json.load(file)
         return states_info_dict
@@ -52,7 +53,7 @@ with DAG(
     
     @task()
     def get_weather_info() -> list:
-        OPEN_WEATHER_API_KEY = os.getenv("OPEN_WEATHER_API_KEY")
+        OPEN_WEATHER_API_KEY = os.getenv("OPEN_WEATHER_API_KEY", "Not found")
         states_info = read_states_info()
         weather_info_list = []
         for key, value in states_info.items():
@@ -61,6 +62,8 @@ with DAG(
             url = f"https://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitute}&appid={OPEN_WEATHER_API_KEY}"
             response = requests.get(url)
             response = response.json()
+            if response["cod"] == 401:
+                raise Exception("It was not possible to retrieve the data, due to unauthorized request.")
             response['city'] = key
             weather_info_list.append(response)
         logging.info("Extract task ran successfully!")
