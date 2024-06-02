@@ -242,5 +242,3 @@ services:
 
 volumes:
   postgres-db-volume:
-
-# Falta subir o arquivo pro s3  
