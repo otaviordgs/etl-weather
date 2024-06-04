@@ -70,7 +70,7 @@ with DAG(
         return weather_info_list
     
     @task
-    def transform_weather_info(ti = None):
+    def transform_weather_info(ti = None) -> None:
         weathers_info_list = ti.xcom_pull(key='return_value', task_ids='get_weather_info')
         transformed_weather_list = []
         for weather_info in weathers_info_list:
@@ -79,7 +79,7 @@ with DAG(
         ti.xcom_push(key='transformed_weather_list', value=transformed_weather_list)
 
     @task
-    def send_data_to_s3(ti = None):
+    def send_data_to_s3(ti = None) -> None:
         AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
         AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
         s3 = boto3.resource(
@@ -99,7 +99,6 @@ with DAG(
             logging.error(e)
         finally:
             os.remove("weather_info.csv")
-            logging.info(os.getcwd())
         logging.info("File uploaded successfully!")     
 
     get_weather_info() >> transform_weather_info() >> send_data_to_s3()
